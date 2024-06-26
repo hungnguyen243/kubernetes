@@ -347,6 +347,7 @@ func (c *Controller) askAPIServer(ctx context.Context, pvc *v1.PersistentVolumeC
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Looking for Pods using PVC with a live list", "PVC", klog.KObj(pvc))
 	if lazyLivePodList.getCache() == nil {
+		logger.V(4).Info("live api call", "PVC", klog.KObj(pvc))
 		podsList, err := c.client.CoreV1().Pods(pvc.Namespace).List(ctx, metav1.ListOptions{})
 
 		if err != nil {
