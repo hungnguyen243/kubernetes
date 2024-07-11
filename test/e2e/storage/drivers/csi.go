@@ -117,7 +117,7 @@ func initHostPathCSIDriver(name string, capabilities map[storageframework.Capabi
 			PerformanceTestOptions: &storageframework.PerformanceTestOptions{
 				ProvisioningOptions: &storageframework.PerformanceTestProvisioningOptions{
 					VolumeSize: "1Mi",
-					Count:      1000,
+					Count:      10000,
 					// Volume provisioning metrics are compared to a high baseline.
 					// Failure to pass would suggest a performance regression.
 					ExpectedMetrics: &storageframework.Metrics{
@@ -230,7 +230,9 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 		DriverNamespace:     driverNamespace,
 	}
 
-	o := utils.PatchCSIOptions{
+	patches := []utils.PatchCSIOptions{}
+
+	patches = append(patches, utils.PatchCSIOptions{
 		OldDriverName:       h.driverInfo.Name,
 		NewDriverName:       config.GetUniqueDriverName(),
 		DriverContainerName: "hostpath",
@@ -246,11 +248,18 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 		ProvisionerContainerName: "csi-provisioner",
 		SnapshotterContainerName: "csi-snapshotter",
 		NodeName:                 node.Name,
-	}
+	})
+
+	// patches = append(patches, utils.PatchCSIOptions{
+	// 	DriverContainerName:      "csi-provisioner",
+	// 	DriverContainerArguments: []string{"--kube-api-qps=30", "--kube-api-burst=60"},
+	// })
 
 	err = utils.CreateFromManifests(ctx, config.Framework, driverNamespace, func(item interface{}) error {
-		if err := utils.PatchCSIDeployment(config.Framework, o, item); err != nil {
-			return err
+		for _, o := range patches {
+			if err := utils.PatchCSIDeployment(config.Framework, o, item); err != nil {
+				return err
+			}
 		}
 
 		// Remove csi-external-health-monitor-agent and
@@ -944,12 +953,11 @@ func (g *gcePDCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework
 	// by passing a nil function below.
 	//
 	// These are the options which would have to be used:
-	// o := utils.PatchCSIOptions{
-	// 	OldDriverName:            g.driverInfo.Name,
-	// 	NewDriverName:            storageframework.GetUniqueDriverName(g),
-	// 	DriverContainerName:      "gce-driver",
-	// 	ProvisionerContainerName: "csi-external-provisioner",
-	// }
+	o := utils.PatchCSIOptions{
+		DriverContainerName:      "gce-driver",
+		ProvisionerContainerName: "csi-external-provisioner",
+		DriverContainerArguments: []string{"--worker-threads=1000"},
+	}
 	createGCESecrets(f.ClientSet, driverns)
 
 	manifests := []string{
@@ -960,7 +968,12 @@ func (g *gcePDCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework
 		"test/e2e/testing-manifests/storage-csi/gce-pd/controller_ss.yaml",
 	}
 
-	err = utils.CreateFromManifests(ctx, f, driverNamespace, nil, manifests...)
+	err = utils.CreateFromManifests(ctx, f, driverNamespace, func(item interface{}) error {
+		if err := utils.PatchCSIDeployment(f, o, item); err != nil {
+			return err
+		}
+		return nil
+	}, manifests...)
 	if err != nil {
 		framework.Failf("deploying csi gce-pd driver: %v", err)
 	}

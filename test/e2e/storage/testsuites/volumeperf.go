@@ -123,8 +123,8 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 	})
 
 	frameworkOptions := framework.Options{
-		ClientQPS:   200,
-		ClientBurst: 400,
+		ClientQPS:   500,
+		ClientBurst: 1000,
 	}
 	f := framework.NewFramework("volume-lifecycle-performance", frameworkOptions, nil)
 	f.NamespacePodSecurityLevel = admissionapi.LevelPrivileged
@@ -135,7 +135,11 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 				ginkgo.By("Closing informer channel")
 				close(l.stopCh)
 			}
-
+			deletingStats := &performanceStats{
+				mutex:             &sync.Mutex{},
+				perObjectInterval: make(map[string]*interval),
+				operationMetrics:  &storageframework.Metrics{},
+			}
 			var (
 				errs []error
 				mu   sync.Mutex
@@ -166,20 +170,35 @@ func (t *volumePerformanceTestSuite) DefineTests(driver storageframework.TestDri
 					defer wg.Done() // Decrement the counter when the goroutine finishes
 					startDeletingPvcTime := time.Now()
 					framework.Logf("Start deleting PVC %v", pvc.GetName())
+					deletingStats.mutex.Lock()
+					deletingStats.perObjectInterval[pvc.Name] = &interval{
+						create: startDeletingPvcTime,
+					}
+					deletingStats.mutex.Unlock()
 					err := e2epv.DeletePersistentVolumeClaim(ctx, l.cs, pvc.Name, pvc.Namespace)
-					framework.Logf("Deleted PVC %v in %v", pvc.GetName(), time.Since(startDeletingPvcTime))
+					// framework.Logf("Deleted PVC %v in %v", pvc.GetName(), time.Since(startDeletingPvcTime))
 					framework.ExpectNoError(err)
 					startDeletingPVTime := time.Now()
 					err = e2epv.WaitForPersistentVolumeDeleted(ctx, l.cs, pvc.Spec.VolumeName, 1*time.Second, 100*time.Minute)
-					framework.Logf("Deleted PV %v in %v", pvc.GetName(), time.Since(startDeletingPVTime))
+					framework.Logf("Deleted PV %v, PVC % v in %v", pvc.Spec.VolumeName, pvc.GetName(), time.Since(startDeletingPVTime))
+					now := time.Now()
+					newPVCInterval, ok := deletingStats.perObjectInterval[pvc.Name]
+					if !ok {
+						framework.Failf("PVC %s should exist in deletion's interval map already", pvc.Name)
+					}
+					newPVCInterval.enterDesiredState = now
+					newPVCInterval.elapsed = now.Sub(newPVCInterval.create)
 					framework.ExpectNoError(err)
 				}(pvc)
 			}
 			wg.Wait()
+			createPerformanceStats(deletingStats, l.options.ProvisioningOptions.Count, l.pvcs)
+			framework.Logf("Deleting PVC/PV avg latency: %f ", deletingStats.operationMetrics.AvgLatency.Seconds())
+			framework.Logf("Deleting PVC/PV avg throughput: %f ", deletingStats.operationMetrics.Throughput)
 
 			endTime := time.Now() // Capture overall end time
 			totalDuration := endTime.Sub(startTime)
-			framework.Logf("Deleted all PVCs in %v", totalDuration) // Log total deletion time
+			framework.Logf("Deleted all PVC/PVs in %v", totalDuration) // Log total deletion time
 
 			ginkgo.By(fmt.Sprintf("Deleting Storage Class %s", l.scName))
 			err := l.cs.StorageV1().StorageClasses().Delete(ctx, l.scName, metav1.DeleteOptions{})

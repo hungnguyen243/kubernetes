@@ -333,8 +333,13 @@ func startPersistentVolumeBinderController(ctx context.Context, controllerContex
 		return nil, true, fmt.Errorf("failed to probe volume plugins when starting persistentvolume controller: %v", err)
 	}
 
+	modifiedKubeconfig := controllerContext.ClientBuilder.ConfigOrDie("persistent-volume-binder")
+	modifiedKubeconfig.QPS = 100
+	modifiedKubeconfig.Burst = 100
+	modifiedKubeClient := clientset.NewForConfigOrDie(modifiedKubeconfig)
+
 	params := persistentvolumecontroller.ControllerParameters{
-		KubeClient:                controllerContext.ClientBuilder.ClientOrDie("persistent-volume-binder"),
+		KubeClient:                modifiedKubeClient,
 		SyncPeriod:                controllerContext.ComponentConfig.PersistentVolumeBinderController.PVClaimBinderSyncPeriod.Duration,
 		VolumePlugins:             plugins,
 		VolumeInformer:            controllerContext.InformerFactory.Core().V1().PersistentVolumes(),
