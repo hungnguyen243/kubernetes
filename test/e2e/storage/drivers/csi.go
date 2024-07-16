@@ -250,10 +250,10 @@ func (h *hostpathCSIDriver) PrepareTest(ctx context.Context, f *framework.Framew
 		NodeName:                 node.Name,
 	})
 
-	// patches = append(patches, utils.PatchCSIOptions{
-	// 	DriverContainerName:      "csi-provisioner",
-	// 	DriverContainerArguments: []string{"--kube-api-qps=30", "--kube-api-burst=60"},
-	// })
+	patches = append(patches, utils.PatchCSIOptions{
+		DriverContainerName:      "csi-provisioner",
+		DriverContainerArguments: []string{"--kube-api-qps=30", "--kube-api-burst=60"},
+	})
 
 	err = utils.CreateFromManifests(ctx, config.Framework, driverNamespace, func(item interface{}) error {
 		for _, o := range patches {
@@ -954,9 +954,10 @@ func (g *gcePDCSIDriver) PrepareTest(ctx context.Context, f *framework.Framework
 	//
 	// These are the options which would have to be used:
 	o := utils.PatchCSIOptions{
+		OldDriverName:            g.driverInfo.Name,
 		DriverContainerName:      "gce-driver",
 		ProvisionerContainerName: "csi-external-provisioner",
-		DriverContainerArguments: []string{"--worker-threads=1000"},
+		DriverContainerArguments: []string{"--kube-api-qps=30", "--kube-api-burst=60"},
 	}
 	createGCESecrets(f.ClientSet, driverns)
 
