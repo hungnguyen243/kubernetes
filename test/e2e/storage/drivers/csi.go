@@ -117,7 +117,7 @@ func initHostPathCSIDriver(name string, capabilities map[storageframework.Capabi
 			PerformanceTestOptions: &storageframework.PerformanceTestOptions{
 				ProvisioningOptions: &storageframework.PerformanceTestProvisioningOptions{
 					VolumeSize: "1Mi",
-					Count:      10000,
+					Count:      1000,
 					// Volume provisioning metrics are compared to a high baseline.
 					// Failure to pass would suggest a performance regression.
 					ExpectedMetrics: &storageframework.Metrics{

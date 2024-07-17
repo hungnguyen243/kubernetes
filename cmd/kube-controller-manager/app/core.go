@@ -334,8 +334,8 @@ func startPersistentVolumeBinderController(ctx context.Context, controllerContex
 	}
 
 	modifiedKubeconfig := controllerContext.ClientBuilder.ConfigOrDie("persistent-volume-binder")
-	modifiedKubeconfig.QPS = 100
-	modifiedKubeconfig.Burst = 100
+	modifiedKubeconfig.QPS = 30
+	modifiedKubeconfig.Burst = 60
 	modifiedKubeClient := clientset.NewForConfigOrDie(modifiedKubeconfig)
 
 	params := persistentvolumecontroller.ControllerParameters{
